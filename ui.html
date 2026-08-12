@@ -1,0 +1,615 @@
+<!doctype html>
+<html>
+<head>
+  <script>
+    try {
+      window.localStorage.getItem('x')
+    } catch (e) {
+      const store = new Map()
+      const shim = {
+        getItem: (k) => (store.has(k) ? store.get(k) : null),
+        setItem: (k, v) => { store.set(k, String(v)) },
+        removeItem: (k) => { store.delete(k) },
+        clear: () => { store.clear() },
+        key: (i) => Array.from(store.keys())[i] ?? null,
+        get length() { return store.size },
+      }
+      Object.defineProperty(window, 'localStorage', { value: shim, configurable: true })
+    }
+  </script>
+  <style>
+    :root {
+      --fig-font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --fig-bg: var(--figma-color-bg, #ffffff);
+      --fig-bg-secondary: var(--figma-color-bg-secondary, #f5f5f5);
+      --fig-text: var(--figma-color-text, #333333);
+      --fig-text-secondary: var(--figma-color-text-secondary, #010101);
+      --fig-text-brand: var(--figma-color-text-brand, #0d99ff);
+      --fig-border: var(--figma-color-border, #e5e5e5);
+      --fig-bg-brand: var(--figma-color-bg-brand, #0d99ff);
+      --fig-bg-brand-hover: var(--figma-color-bg-brand-hover, #0b87e0);
+      --fig-radius: 6px;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; height: auto; min-height: 0; background: var(--fig-bg); }
+    body { font-family: var(--fig-font); font-size: 11px; color: var(--fig-text); }
+
+    /* Layout */
+    #plugin-root { display: flex; flex-direction: column; min-height: 100vh; }
+    .content { flex: 1; overflow-y: auto; padding-bottom: 8px; }
+    .footer { position: sticky; bottom: 0; padding: 12px; border-top: 1px solid var(--fig-border); background: var(--fig-bg); }
+
+    /* Component info banner */
+    .comp-info {
+      display: flex; flex-direction: column; gap: 2px;
+      padding: 8px 12px; margin: 8px 12px 0;
+      background: var(--fig-bg-secondary); border-radius: var(--fig-radius);
+    }
+    .comp-name { font-size: 12px; font-weight: 600; color: var(--fig-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .comp-meta { font-size: 11px; color: var(--fig-text-secondary); }
+    .no-comp   { font-size: 11px; color: var(--fig-text-secondary); font-style: italic; }
+
+    /* Groups */
+    .group { padding: 0 12px; margin-top: 16px; display: flex; flex-direction: column; gap: 10px; }
+    .group-header {
+      font-size: 11px; font-weight: 600; color: var(--fig-text-secondary);
+      text-transform: uppercase; letter-spacing: 0.5px;
+      margin-bottom: 10px; padding-top: 10px;
+      border-top: 1px solid var(--fig-border);
+    }
+
+    /* Fields */
+    .field { margin-bottom: 10px; display: flex; flex-direction: column; row-gap: 8px; }
+    .field label { display: block; font-size: 11px; color: var(--fig-text-secondary); font-weight: 500; }
+
+    /* Inputs */
+    input[type="text"], input[type="password"], select {
+      width: 100%; height: 30px; padding: 0 8px;
+      font-family: var(--fig-font); font-size: 11px; color: var(--fig-text);
+      background: var(--fig-bg); border: 1px solid var(--fig-border);
+      border-radius: var(--fig-radius); outline: none;
+    }
+    input[type="text"]:focus, input[type="password"]:focus, select:focus {
+      border-color: var(--fig-bg-brand); box-shadow: 0 0 0 1px var(--fig-bg-brand);
+    }
+    select { cursor: pointer; appearance: auto; }
+
+    /* File input */
+    .file-input-wrap {
+      position: relative; width: 100%;
+    }
+    .file-input-wrap input[type="file"] {
+      position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+    }
+    .file-input-label {
+      display: flex; align-items: center; justify-content: center;
+      height: 30px; padding: 0 8px;
+      font-family: var(--fig-font); font-size: 11px; color: var(--fig-text-secondary);
+      background: var(--fig-bg); border: 1px dashed var(--fig-border);
+      border-radius: var(--fig-radius); cursor: pointer;
+    }
+    .file-input-label:hover { border-color: var(--fig-bg-brand); color: var(--fig-text); }
+
+    /* Segmented control (variant columns) */
+    .segmented {
+      display: flex; gap: 0; border: 1px solid var(--fig-border); border-radius: var(--fig-radius); overflow: hidden;
+    }
+    .segmented input { display: none; }
+    .segmented label {
+      flex: 1; text-align: center; padding: 6px 0;
+      font-size: 11px; font-weight: 500; color: var(--fig-text-secondary);
+      background: var(--fig-bg); cursor: pointer; border-right: 1px solid var(--fig-border);
+      transition: background 0.1s, color 0.1s;
+    }
+    .segmented label:last-of-type { border-right: none; }
+    .segmented label:hover { background: var(--fig-bg-secondary); }
+    .segmented input:checked + label {
+      background: var(--fig-bg-brand); color: #fff; font-weight: 600;
+    }
+
+    /* Buttons */
+    .btn {
+      display: flex; align-items: center; justify-content: center;
+      width: 100%; height: 32px; padding: 0 12px;
+      font-family: var(--fig-font); font-size: 11px; font-weight: 600;
+      border: none; border-radius: var(--fig-radius); cursor: pointer;
+      transition: background 0.15s, opacity 0.15s;
+    }
+    .btn-primary {
+      background: var(--fig-bg-brand); color: #fff;
+    }
+    .btn-primary:hover:not(:disabled) { background: var(--fig-bg-brand-hover); }
+    .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-secondary {
+      background: var(--fig-bg-secondary); color: var(--fig-text); border: 1px solid var(--fig-border);
+    }
+    .btn-secondary:hover { background: var(--fig-border); }
+
+    /* Status messages */
+    .md-filename { font-size: 11px; color: var(--fig-text-secondary); padding: 2px 0 4px; }
+    .ai-status { font-size: 11px; padding: 4px 0 0; min-height: 16px; }
+    .ai-status.ok   { color: #0e8a4a; }
+    .ai-status.err  { color: #d63232; }
+    .ai-status.busy { color: #888; }
+
+    /* Token saved state */
+    .token-saved {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 11px; color: var(--fig-text-secondary); height: 30px;
+    }
+    .token-saved .change-btn {
+      color: var(--fig-text-brand); cursor: pointer; text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div id="plugin-root">
+    <div class="comp-info" id="compInfo">
+      <span class="no-comp">No component selected</span>
+    </div>
+
+    <div class="content">
+      <!-- Component group -->
+      <div class="group">
+        <div class="group-header">Component</div>
+        <div class="field">
+          <label>Status</label>
+          <select id="status">
+            <option value="Draft">Draft</option>
+            <option value="In Progress">In Progress</option>
+            <option value="Ready" selected>Ready</option>
+            <option value="Deprecated">Deprecated</option>
+            <option value="Archived">Archived</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Design system link</label>
+          <input type="text" id="dsLink" value="" placeholder="https://figma.com/file/…">
+        </div>
+        <div class="field">
+          <label>Variants columns</label>
+          <div class="segmented" id="variantColsGroup">
+            <input type="radio" name="variantCols" id="vc1" value="1" checked>
+            <label for="vc1">1</label>
+            <input type="radio" name="variantCols" id="vc2" value="2">
+            <label for="vc2">2</label>
+            <input type="radio" name="variantCols" id="vc3" value="3">
+            <label for="vc3">3</label>
+            <input type="radio" name="variantCols" id="vc4" value="4">
+            <label for="vc4">4</label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Documentation group -->
+      <div class="group">
+        <div class="group-header">Documentation</div>
+        <div class="field">
+          <label>Markdown file (.md)</label>
+          <div class="file-input-wrap">
+            <span class="file-input-label">Upload .md file</span>
+            <input type="file" id="mdFile" accept=".md,.mdx">
+          </div>
+        </div>
+        <div id="mdFilename" class="md-filename" style="display:none"></div>
+
+        <div class="field">
+          <label>&mdash; or GitHub URL (file or folder)</label>
+          <input type="text" id="ghUrl" value="" placeholder="https://github.com/org/repo/tree/main/packages/alert/docs">
+        </div>
+        <div class="field">
+          <label>GitHub token (optional, for private repos)</label>
+          <div id="ghTokenSaved" class="token-saved" style="display:none;">
+            <span>&#10003; Token saved</span>
+            <span class="change-btn" id="ghTokenChangeBtn">Change</span>
+          </div>
+          <div id="ghTokenInputWrap">
+            <input type="password" id="ghToken" value="" placeholder="ghp_…">
+          </div>
+        </div>
+        <button class="btn btn-secondary" id="ghFetchBtn" style="margin-top:4px">Fetch from GitHub</button>
+        <button class="btn btn-secondary" id="ghCheckBtn" style="display:none;margin-top:4px">Check for updates</button>
+        <div id="ghStatus" class="ai-status"></div>
+      </div>
+
+      <!-- AI Overview group -->
+      <div class="group">
+        <div class="group-header">AI Overview</div>
+        <div class="field">
+          <label>Anthropic API key (optional)</label>
+          <input type="password" id="apiKey" value="" placeholder="sk-ant-…">
+        </div>
+        <div id="aiStatus" class="ai-status"></div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <button class="btn btn-primary" id="action-generate" disabled>Generate documentation</button>
+    </div>
+  </div>
+
+  <script>
+    let currentMarkdown = ''
+    let currentCompName = ''
+    let currentPropNames = ''
+    let currentVariantCount = 0
+    let currentGithubUrl = ''
+    let currentGithubSha = ''
+    let lastReportedHeight = 0
+    let resizeRaf = 0
+
+    // ── Variant columns helper ──────────────────────────────────────────────
+    // Getter/setter that works like the old fig-options element
+    const variantColsEl = {
+      get value() {
+        const checked = document.querySelector('input[name="variantCols"]:checked')
+        return checked ? checked.value : '1'
+      },
+      set value(v) {
+        const radio = document.getElementById('vc' + v)
+        if (radio) radio.checked = true
+      }
+    }
+    // Expose on a virtual element for message handler compatibility
+    Object.defineProperty(document.getElementById('variantColsGroup'), 'value', {
+      get() { return variantColsEl.value },
+      set(v) { variantColsEl.value = v }
+    })
+
+    // ── Height reporting ────────────────────────────────────────────────────
+    function measurePanelHeight() {
+      const root = document.getElementById('plugin-root')
+      if (!root) return 0
+      return Math.ceil(root.getBoundingClientRect().height)
+    }
+    function reportHeight() {
+      const h = measurePanelHeight()
+      if (h && h !== lastReportedHeight) {
+        lastReportedHeight = h
+        parent.postMessage({ pluginMessage: { type: 'resize', height: h } }, '*')
+      }
+    }
+    const root = document.getElementById('plugin-root')
+    if (root && typeof ResizeObserver !== 'undefined') {
+      new ResizeObserver(() => {
+        if (resizeRaf) cancelAnimationFrame(resizeRaf)
+        resizeRaf = requestAnimationFrame(reportHeight)
+      }).observe(root)
+    }
+    new MutationObserver(() => {
+      if (resizeRaf) cancelAnimationFrame(resizeRaf)
+      resizeRaf = requestAnimationFrame(reportHeight)
+    }).observe(document.body, { childList: true, attributes: true, subtree: true })
+
+    // ── Persist API key in localStorage ─────────────────────────────────────
+    const APIKEY_STORE = 'figma-docs-gen-api-key'
+    const savedKey = localStorage.getItem(APIKEY_STORE)
+    if (savedKey) document.getElementById('apiKey').value = savedKey
+
+    document.getElementById('apiKey').addEventListener('input', (e) => {
+      localStorage.setItem(APIKEY_STORE, e.target.value)
+    })
+
+    // ── Persist GitHub token via figma.clientStorage ────────────────────────
+    let ghTokenValue = ''
+
+    function showTokenSaved() {
+      document.getElementById('ghTokenSaved').style.display = 'flex'
+      document.getElementById('ghTokenInputWrap').style.display = 'none'
+    }
+    function showTokenInput() {
+      document.getElementById('ghTokenSaved').style.display = 'none'
+      document.getElementById('ghTokenInputWrap').style.display = ''
+      document.getElementById('ghToken').value = ''
+    }
+
+    parent.postMessage({ pluginMessage: { type: 'get-gh-token' } }, '*')
+
+    document.getElementById('ghToken').addEventListener('change', (e) => {
+      const val = e.target.value || ''
+      if (val) {
+        ghTokenValue = val
+        parent.postMessage({ pluginMessage: { type: 'save-gh-token', token: val } }, '*')
+        showTokenSaved()
+      }
+    })
+
+    document.getElementById('ghTokenChangeBtn').addEventListener('click', () => {
+      showTokenInput()
+    })
+
+    // ── GitHub URL parser ────────────────────────────────────────────────────
+    function parseGitHubUrl(url) {
+      const u = url.trim().replace(/\?.*$/, '').replace(/#.*$/, '').replace(/\/$/, '')
+      const fileMatch = u.match(/github\.com\/([^/]+)\/([^/]+)\/blob\/([^/]+)\/(.+)/)
+      if (fileMatch) return { owner: fileMatch[1], repo: fileMatch[2], ref: fileMatch[3], path: fileMatch[4], type: 'file' }
+      const dirMatch = u.match(/github\.com\/([^/]+)\/([^/]+)\/tree\/([^/]+)\/(.+)/)
+      if (dirMatch) return { owner: dirMatch[1], repo: dirMatch[2], ref: dirMatch[3], path: dirMatch[4], type: 'dir' }
+      const rawMatch = u.match(/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/(.+)/)
+      if (rawMatch) return { owner: rawMatch[1], repo: rawMatch[2], ref: rawMatch[3], path: rawMatch[4], type: 'file' }
+      return null
+    }
+
+    // ── GitHub API helpers ────────────────────────────────────────────────────
+    function ghHeaders(token) {
+      const h = { 'User-Agent': 'FigmaDocsGenerator/1.0', 'X-GitHub-Api-Version': '2022-11-28' }
+      if (token) h['Authorization'] = 'token ' + token
+      return h
+    }
+
+    async function ghFetchFile(owner, repo, path, ref, token) {
+      const headers = ghHeaders(token)
+      headers['Accept'] = 'application/vnd.github.raw+json'
+      const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${ref}`
+      const resp = await fetch(apiUrl, { headers })
+      if (!resp.ok) {
+        if (resp.status === 404) throw new Error(`Not found: ${path}`)
+        if (resp.status === 403) throw new Error('Forbidden — token needs "repo" scope')
+        if (resp.status === 401) throw new Error('Unauthorized — invalid token')
+        throw new Error(`GitHub error ${resp.status}`)
+      }
+      return await resp.text()
+    }
+
+    async function ghListDir(owner, repo, path, ref, token) {
+      const headers = ghHeaders(token)
+      headers['Accept'] = 'application/vnd.github.v3+json'
+      const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${ref}`
+      const resp = await fetch(apiUrl, { headers })
+      if (!resp.ok) {
+        const body = await resp.text().catch(() => '')
+        if (resp.status === 404) throw new Error('Directory not found (404) — check path or token')
+        if (resp.status === 403) throw new Error('Forbidden (403) — token needs "repo" scope')
+        if (resp.status === 401) throw new Error('Unauthorized (401) — invalid token')
+        throw new Error(`GitHub error ${resp.status}: ${body.slice(0, 80)}`)
+      }
+      return await resp.json()
+    }
+
+    async function ghGetLatestSha(owner, repo, path, ref, token) {
+      const headers = ghHeaders(token)
+      headers['Accept'] = 'application/vnd.github.v3+json'
+      const apiUrl = `https://api.github.com/repos/${owner}/${repo}/commits?sha=${ref}&path=${encodeURIComponent(path)}&per_page=1`
+      const resp = await fetch(apiUrl, { headers })
+      if (!resp.ok) throw new Error(`GitHub error ${resp.status}`)
+      const data = await resp.json()
+      if (data.length === 0) throw new Error('No commits found for this path')
+      return data[0].sha
+    }
+
+    // ── MDX content cleaner ─────────────────────────────────────────────────
+    function cleanMdx(raw) {
+      let text = raw
+      text = text.replace(/^import\s+.*$/gm, '')
+      text = text.replace(/```[\s\S]*?```/g, '')
+      text = text.replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+      text = text.replace(/<(Preview|img|Image|Screenshot|Playground|Canvas|Story|Meta|ArgsTable|Source)[^>]*\/>/gi, '')
+      text = text.replace(/<(Preview|img|Image|Screenshot|Playground|Canvas|Story|Meta|ArgsTable|Source)[^>]*>[\s\S]*?<\/\1>/gi, '')
+      const dos = []
+      const donts = []
+      text = text.replace(/<Usage\.Do>\s*([\s\S]*?)\s*<\/Usage\.Do>/gi, (_, content) => {
+        dos.push(content.replace(/<[^>]+>/g, '').trim()); return ''
+      })
+      text = text.replace(/<Usage\.Dont?>\s*([\s\S]*?)\s*<\/Usage\.Dont?>/gi, (_, content) => {
+        donts.push(content.replace(/<[^>]+>/g, '').trim()); return ''
+      })
+      text = text.replace(/<Usage[^.>]*>[\s\S]*?<\/Usage>/gi, '')
+      text = text.replace(/<Usage[^.>]*\/>/gi, '')
+      text = text.replace(/<[A-Z][A-Za-z0-9.]*[^>]*\/>/g, '')
+      text = text.replace(/<[A-Z][A-Za-z0-9.]*[^>]*>([\s\S]*?)<\/[A-Z][A-Za-z0-9.]*>/g, '$1')
+      text = text.replace(/<\/?(code|strong|em|b|i|u|small|mark|abbr|sup|sub)[^>]*>/gi, '')
+      text = text.replace(/<\/?(?:br|hr|div|span|section|article|aside|nav|header|footer|figure|figcaption|p)[^>]*>/gi, '')
+      text = text.replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+      text = text.replace(/\n{3,}/g, '\n\n').trim()
+      if (dos.length > 0 || donts.length > 0) {
+        let doBlock = ''
+        if (dos.length > 0) doBlock += '\n\n### Do\n\n' + dos.map(d => `- ${d}`).join('\n')
+        if (donts.length > 0) doBlock += "\n\n### Don't\n\n" + donts.map(d => `- ${d}`).join('\n')
+        const usageHeadingMatch = text.match(/^##\s*Usage[^\n]*/mi)
+        if (usageHeadingMatch) {
+          const usageStart = usageHeadingMatch.index + usageHeadingMatch[0].length
+          const afterUsage = text.slice(usageStart)
+          const nextSubHeading = afterUsage.match(/\n(?=###\s)/)
+          if (nextSubHeading) {
+            const insertPos = usageStart + nextSubHeading.index
+            text = text.slice(0, insertPos) + doBlock + text.slice(insertPos)
+          } else {
+            const nextH2 = afterUsage.match(/\n(?=##\s[^#])/)
+            if (nextH2) {
+              const insertPos = usageStart + nextH2.index
+              text = text.slice(0, insertPos) + doBlock + text.slice(insertPos)
+            } else { text += doBlock }
+          }
+        } else { text += '\n\n## Usage' + doBlock }
+      }
+      return text
+    }
+
+    // ── GitHub fetch ─────────────────────────────────────────────────────────
+    document.getElementById('ghFetchBtn').addEventListener('click', async () => {
+      const statusEl = document.getElementById('ghStatus')
+      const url = (document.getElementById('ghUrl').value || '').trim()
+      const token = (ghTokenValue || document.getElementById('ghToken').value || '').trim()
+      if (!url) { statusEl.textContent = '⚠ Enter a GitHub URL'; statusEl.className = 'ai-status err'; return }
+      const parsed = parseGitHubUrl(url)
+      if (!parsed) { statusEl.textContent = '⚠ Invalid URL — use /blob/… (file) or /tree/… (folder)'; statusEl.className = 'ai-status err'; return }
+      statusEl.textContent = 'Fetching…'; statusEl.className = 'ai-status busy'
+      try {
+        if (parsed.type === 'file') {
+          const raw = await ghFetchFile(parsed.owner, parsed.repo, parsed.path, parsed.ref, token)
+          currentMarkdown = cleanMdx(raw)
+          const filename = parsed.path.split('/').pop() || 'file.md'
+          const fn = document.getElementById('mdFilename')
+          fn.textContent = `✓ ${filename} (from GitHub)`; fn.style.display = 'block'
+          statusEl.textContent = `✓ ${filename} (${currentMarkdown.length} chars)`; statusEl.className = 'ai-status ok'
+        } else {
+          const entries = await ghListDir(parsed.owner, parsed.repo, parsed.path, parsed.ref, token)
+          if (!Array.isArray(entries)) throw new Error('URL does not point to a directory')
+          const mdFiles = entries.filter(e => e.type === 'file' && /\.(md|mdx)$/i.test(e.name))
+            .sort((a, b) => { if (/^index\./i.test(a.name)) return -1; if (/^index\./i.test(b.name)) return 1; return a.name.localeCompare(b.name) })
+          if (mdFiles.length === 0) throw new Error('No .md/.mdx files found in this directory')
+          statusEl.textContent = `Fetching ${mdFiles.length} file(s)…`
+          const parts = []
+          for (const file of mdFiles) {
+            const raw = await ghFetchFile(parsed.owner, parsed.repo, file.path, parsed.ref, token)
+            const cleaned = cleanMdx(raw)
+            const sectionName = file.name.replace(/\.(md|mdx)$/i, '')
+            if (/^index$/i.test(sectionName)) parts.push(cleaned)
+            else parts.push(`## ${sectionName.charAt(0).toUpperCase() + sectionName.slice(1)}\n\n${cleaned}`)
+          }
+          currentMarkdown = parts.join('\n\n')
+          const dirName = parsed.path.split('/').pop() || 'docs'
+          const fn = document.getElementById('mdFilename')
+          fn.textContent = `✓ ${dirName}/ (${mdFiles.length} files)`; fn.style.display = 'block'
+          statusEl.textContent = `✓ ${mdFiles.length} files: ${mdFiles.map(f => f.name).join(', ')}`; statusEl.className = 'ai-status ok'
+        }
+        currentGithubUrl = url
+        try { currentGithubSha = await ghGetLatestSha(parsed.owner, parsed.repo, parsed.path, parsed.ref, token) } catch { currentGithubSha = '' }
+        document.getElementById('ghCheckBtn').style.display = ''
+      } catch (err) { statusEl.textContent = `⚠ ${err.message}`; statusEl.className = 'ai-status err' }
+    })
+
+    // ── Check for updates ────────────────────────────────────────────────────
+    document.getElementById('ghCheckBtn').addEventListener('click', async () => {
+      const statusEl = document.getElementById('ghStatus')
+      const url = (document.getElementById('ghUrl').value || '').trim()
+      const token = (ghTokenValue || document.getElementById('ghToken').value || '').trim()
+      if (!url) { statusEl.textContent = '⚠ Enter a GitHub URL'; statusEl.className = 'ai-status err'; return }
+      const parsed = parseGitHubUrl(url)
+      if (!parsed) { statusEl.textContent = '⚠ Invalid URL'; statusEl.className = 'ai-status err'; return }
+      statusEl.textContent = 'Checking…'; statusEl.className = 'ai-status busy'
+      try {
+        const latestSha = await ghGetLatestSha(parsed.owner, parsed.repo, parsed.path, parsed.ref, token)
+        parent.postMessage({ pluginMessage: { type: 'get-github-info' } }, '*')
+        if (currentGithubSha && latestSha === currentGithubSha) {
+          statusEl.textContent = '✓ Documentation is up to date'; statusEl.className = 'ai-status ok'
+        } else {
+          statusEl.textContent = '⚠ Changes detected on GitHub — re-fetch to update'; statusEl.className = 'ai-status err'
+        }
+      } catch (err) { statusEl.textContent = `⚠ ${err.message}`; statusEl.className = 'ai-status err' }
+    })
+
+    // ── File upload ──────────────────────────────────────────────────────────
+    document.getElementById('mdFile').addEventListener('change', async (e) => {
+      const files = e.target.files
+      if (files && files[0]) {
+        try {
+          currentMarkdown = await files[0].text()
+          const fn = document.getElementById('mdFilename')
+          fn.textContent = files[0].name; fn.style.display = 'block'
+          document.querySelector('.file-input-label').textContent = files[0].name
+        } catch (_) { currentMarkdown = '' }
+      } else {
+        currentMarkdown = ''
+        document.getElementById('mdFilename').style.display = 'none'
+      }
+    })
+
+    // ── AI Overview generation ───────────────────────────────────────────────
+    async function generateOverview(apiKey, compName, propNames, variantCount, markdown) {
+      const mdExcerpt = markdown ? markdown.slice(0, 2000) : ''
+      const propInfo = propNames ? `Properties: ${propNames}` : ''
+      const varInfo = variantCount > 1 ? `Variants: ${variantCount}` : ''
+      const prompt = [
+        `Write a concise professional overview (2–3 sentences, max 120 words) for a design system documentation page.`,
+        ``, `Component: ${compName}`, propInfo, varInfo, ``,
+        mdExcerpt ? `Source documentation:\n${mdExcerpt}` : '', ``,
+        `Requirements:`,
+        `- Describe what this component is and its primary purpose`,
+        `- Mention key behaviors or intended usage within the design system`,
+        `- Be factual — only use information provided above`,
+        `- Do not invent features, variants, or behaviors`,
+        `- Plain prose only, no bullet points or markdown`,
+      ].filter(Boolean).join('\n')
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': apiKey, 'anthropic-version': '2023-06-01',
+          'content-type': 'application/json', 'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 200, messages: [{ role: 'user', content: prompt }] }),
+      })
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ error: { message: resp.statusText } }))
+        throw new Error(err?.error?.message ?? `HTTP ${resp.status}`)
+      }
+      const data = await resp.json()
+      return data?.content?.[0]?.text?.trim() ?? ''
+    }
+
+    // ── Generate button ──────────────────────────────────────────────────────
+    document.getElementById('action-generate').addEventListener('click', async () => {
+      const btn = document.getElementById('action-generate')
+      const statusEl = document.getElementById('aiStatus')
+      const apiKey = (document.getElementById('apiKey').value || '').trim()
+      let generatedOverview = ''
+      if (apiKey) {
+        btn.disabled = true
+        statusEl.textContent = 'Generating overview…'; statusEl.className = 'ai-status busy'
+        try {
+          generatedOverview = await generateOverview(apiKey, currentCompName, currentPropNames, currentVariantCount, currentMarkdown)
+          statusEl.textContent = '✓ Overview generated'; statusEl.className = 'ai-status ok'
+        } catch (err) {
+          statusEl.textContent = `⚠ AI skipped: ${err.message}`; statusEl.className = 'ai-status err'
+        } finally { btn.disabled = false }
+      }
+      parent.postMessage({
+        pluginMessage: {
+          type: 'action', id: 'generate',
+          params: {
+            status: document.getElementById('status').value || 'Ready',
+            dsLink: document.getElementById('dsLink').value || '',
+            markdownDocs: currentMarkdown,
+            generatedOverview: generatedOverview,
+            variantCols: Number(variantColsEl.value || '1'),
+            githubUrl: currentGithubUrl,
+            githubSha: currentGithubSha,
+          },
+        },
+      }, '*')
+    })
+
+    // ── Messages from code.ts ────────────────────────────────────────────────
+    window.addEventListener('message', (event) => {
+      const msg = event.data && event.data.pluginMessage
+      if (!msg) return
+      if (msg.type === 'params-change') {
+        const p = msg.params
+        if (p && p.dsLink != null) document.getElementById('dsLink').value = p.dsLink
+        if (p && p.status) document.getElementById('status').value = p.status
+        if (p && p.variantCols != null) variantColsEl.value = String(p.variantCols)
+        return
+      }
+      if (msg.type === 'component-info') {
+        currentCompName = msg.name || ''
+        currentPropNames = msg.propNames || ''
+        currentVariantCount = msg.variantCount || 0
+        const info = document.getElementById('compInfo')
+        if (msg.name) {
+          const meta = msg.variantCount > 1 ? `${msg.variantCount} variants · ${msg.propNames}` : (msg.propNames || 'No variants')
+          info.innerHTML = `<span class="comp-name">${escHtml(msg.name)}</span><span class="comp-meta">${escHtml(meta)}</span>`
+        } else {
+          info.innerHTML = '<span class="no-comp">No component selected</span>'
+        }
+        return
+      }
+      if (msg.type === 'gh-token') {
+        if (msg.token) { ghTokenValue = msg.token; document.getElementById('ghToken').value = msg.token; showTokenSaved() }
+        return
+      }
+      if (msg.type === 'github-info') {
+        if (msg.sha) { currentGithubSha = msg.sha; currentGithubUrl = msg.url || ''; document.getElementById('ghCheckBtn').style.display = '' }
+        return
+      }
+      if (msg.type === 'action-state' && msg.actions) {
+        const a = msg.actions['generate']
+        const btn = document.getElementById('action-generate')
+        if (a && btn) btn.disabled = !a.enabled
+        return
+      }
+    })
+
+    function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+  </script>
+</body>
+</html>
